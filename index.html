@@ -513,8 +513,30 @@
             { id: '1', sku: 'LIP SERUM', name: 'L\'Essenspial', category: 'Kecantikan', stock: 100, price: 289000 }
         ];
         let transactions = [];
+        const STORAGE_KEY = 'lypeco-warehouse-data-v1';
+        let canPersistData = true;
 
         const todayStr = new Date().toISOString().split('T')[0];
+
+        function loadStoredData() {
+            try {
+                const savedData = localStorage.getItem(STORAGE_KEY);
+                if (savedData === null) return true;
+
+                const parsedData = JSON.parse(savedData);
+                if (!parsedData || !Array.isArray(parsedData.inventory) || !Array.isArray(parsedData.transactions)) {
+                    throw new Error('Format data gudang tersimpan tidak valid.');
+                }
+
+                inventory = parsedData.inventory;
+                transactions = parsedData.transactions;
+                return true;
+            } catch (error) {
+                canPersistData = false;
+                console.error('Gagal membaca data gudang tersimpan:', error);
+                return false;
+            }
+        }
 
         // UI Helpers
         function showToast(msg, isError = false) {
@@ -589,12 +611,24 @@
 
         // Refresh Data Tables and Select Options
         function refreshAll() {
+            let saved = false;
+            if (canPersistData) {
+                try {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify({ inventory, transactions }));
+                    saved = true;
+                } catch (error) {
+                    canPersistData = false;
+                    console.error('Gagal menyimpan data gudang:', error);
+                }
+            }
+
             renderDashboardStats();
             renderLowStockTable();
             renderInventoryTable();
             renderTransactionsTable();
             populateQuickSelect();
             generateReport();
+            return saved;
         }
 
         function renderDashboardStats() {
@@ -718,7 +752,10 @@
 
             closeModal('modal-add-item');
             e.target.reset();
-            refreshAll();
+            if (!refreshAll()) {
+                showToast("Perubahan tampil sementara, tetapi gagal disimpan di browser.", true);
+                return;
+            }
             showToast("Barang berhasil ditambahkan!");
         }
 
@@ -748,7 +785,10 @@
 
             document.getElementById('quick-qty').value = '';
             document.getElementById('quick-notes').value = '';
-            refreshAll();
+            if (!refreshAll()) {
+                showToast("Perubahan tampil sementara, tetapi gagal disimpan di browser.", true);
+                return;
+            }
             showToast(`Berhasil mencatat mutasi ${type.toLowerCase()}!`);
         }
 
@@ -759,7 +799,10 @@
             btn.onclick = function() {
                 inventory = inventory.filter(i => i.id !== id);
                 closeModal('modal-confirm');
-                refreshAll();
+                if (!refreshAll()) {
+                    showToast("Barang terhapus dari tampilan, tetapi gagal disimpan di browser.", true);
+                    return;
+                }
                 showToast("Barang berhasil dihapus!");
             };
             openModal('modal-confirm');
@@ -780,7 +823,10 @@
                     transactions = transactions.filter(t => t.id !== id);
                 }
                 closeModal('modal-confirm');
-                refreshAll();
+                if (!refreshAll()) {
+                    showToast("Perubahan tampil sementara, tetapi gagal disimpan di browser.", true);
+                    return;
+                }
                 showToast("Mutasi dihapus & stok dikembalikan!");
             };
             openModal('modal-confirm');
@@ -1004,7 +1050,10 @@
                     }
                 }
 
-                refreshAll();
+                if (!refreshAll()) {
+                    showToast("Data tampil sementara, tetapi gagal disimpan di browser.", true);
+                    return;
+                }
                 closeModal('modal-import');
                 showToast(`Berhasil menyinkronkan ${count} data barang ke Lype&Co!`);
             };
@@ -1013,11 +1062,17 @@
 
         // Initialize App on Window Load
         window.onload = function() {
+            const loaded = loadStoredData();
             document.getElementById('current-date').innerText = new Date().toLocaleDateString('id-ID', {
                 weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
             });
             document.getElementById('quick-date').value = todayStr;
-            refreshAll();
+            const saved = refreshAll();
+            if (!loaded) {
+                showToast("Data tersimpan gagal dibaca. Perubahan tidak akan disimpan.", true);
+            } else if (!saved) {
+                showToast("Data tampil, tetapi gagal disimpan di browser.", true);
+            }
         };
     </script>
 </body>
